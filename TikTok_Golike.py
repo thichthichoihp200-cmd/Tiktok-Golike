@@ -291,7 +291,6 @@ def draw_box(name, job_type, link, done, maxj, total, i, delay, daily, total_all
 
     print(f"{Color.WHITE}👤 {name}{Color.RESET}")
     
-    # 2. SỬA ĐOẠN NÀY: Kiểm tra nếu có price thì in kèm ra màn hình
     if price > 0:
         print(f"{Color.YELLOW}🎯 LOẠI JOB: {job_type} | GIÁ: {price} xu{Color.RESET}")
     else:
@@ -386,12 +385,11 @@ def main():
         print(f"{Color.CYAN}\n=== DANH SÁCH TÀI KHOẢN ==={Color.RESET}")
         for i,a in enumerate(accs["data"],1):
             aid=str(a["id"])
-            s=stats.get(aid,{"job":0,"xu":0})
             print(
-        f"{Color.YELLOW}{i}.{Color.RESET} "
-        f"{Color.GREEN}{a.get('nickname')}{Color.RESET} "
-        f"{Color.ORANGE}({a.get('unique_username')}){Color.RESET}"
-    )
+                f"{Color.YELLOW}{i}.{Color.RESET} "
+                f"{Color.GREEN}{a.get('nickname')}{Color.RESET} "
+                f"{Color.ORANGE}({a.get('unique_username')}){Color.RESET}"
+            )
 
         choice = input("Chọn Acc (STT hoặc Username): ").strip()
         acc = None
@@ -414,8 +412,18 @@ def main():
         name=f"{acc.get('nickname')} ({acc.get('unique_username')})"
 
         print("\n1. Follow\n2. Like\n3. Cả 2")
-        choice=input("Chọn: ")
+        choice=input("Chọn loại job: ")
         job_filter=["follow","like"] if choice=="3" else ["follow"] if choice=="1" else ["like"]
+
+        # ===== MENU LỌC XU THEO YÊU CẦU =====
+        print(f"\n{Color.CYAN}=== CÀI ĐẶT LỌC XU ==={Color.RESET}")
+        print("1. Làm job >= 40 xu")
+        print("2. Làm job dưới 40 xu")
+        print("3. Làm job tất cả xu")
+        xu_choice = input("Chọn cấu hình lọc xu: ").strip()
+        if xu_choice not in ["1", "2", "3"]:
+            xu_choice = "3"
+        # ====================================
 
         dmin=int(input("Delay Min: "))
         dmax=int(input("Delay Max: "))
@@ -440,7 +448,9 @@ def main():
                 continue
 
             raw=d.get("type","").lower()
+            xu_job = d.get("price_after_cost", 0)
 
+            # Sàng lọc các job không đúng thể loại
             if any(x in raw for x in ["comment","share","view","join"]):
                 draw_box(name,"SKIP","",done,maxj,total,0,1,
                          stats.get(id,{}).get("xu",0),
@@ -459,15 +469,32 @@ def main():
                 skip(h,d,id)
                 continue
 
+            # ===== LOGIC KIỂM TRA ĐIỀU KIỆN LỌC XU =====
+            if xu_choice == "1" and xu_job < 40:
+                draw_box(name, "SKIP XU", "", done, maxj, total, 0, 1,
+                         stats.get(id, {}).get("xu", 0),
+                         get_total_all_acc(stats),
+                         f"🚫 Bỏ qua job thấp xu ({xu_job} xu < 40 xu)", xu_job)
+                time.sleep(1)
+                skip(h, d, id)
+                continue
+
+            elif xu_choice == "2" and xu_job >= 40:
+                draw_box(name, "SKIP XU", "", done, maxj, total, 0, 1,
+                         stats.get(id, {}).get("xu", 0),
+                         get_total_all_acc(stats),
+                         f"🚫 Bỏ qua job cao xu ({xu_job} xu >= 40 xu)", xu_job)
+                time.sleep(1)
+                skip(h, d, id)
+                continue
+            # ============================================
+
             link=d.get("link")
             if not link:
                 skip(h,d,id)
                 continue
 
             job_type=format_job_type(d["type"])
-            
-            # 1. THÊM DÒNG NÀY để lấy giá xu của job từ dữ liệu Golike trả về
-            xu_job = d.get("price_after_cost", 0)
 
             try:
                 subprocess.run(["am","start","-a","android.intent.action.VIEW","-d",link],
@@ -476,7 +503,6 @@ def main():
 
             delay=random.randint(dmin,dmax)
 
-            # 2. THÊM biến xu_job vào cuối hàm draw_box trong vòng lặp này
             for i in range(1,delay+1):
                 draw_box(name,job_type,link,done,maxj,total,i,delay,
                          stats.get(id,{}).get("xu",0),
@@ -487,7 +513,6 @@ def main():
             ok=False;xu=0
 
             for attempt in range(1, retry + 1):
-                # 3. THÊM biến xu_job vào cuối hàm draw_box khi đang bấm hoàn thành
                 draw_box(name,job_type,link,done,maxj,total,delay,delay,
                          stats.get(id,{}).get("xu",0),
                          get_total_all_acc(stats),
@@ -495,12 +520,13 @@ def main():
                 r=complete(h,d["id"],id)
 
                 if r and r.get("status")==200:
-                    xu=r.get("data",{}).get("prices",0)
+                    # ĐỒNG BỘ NGUỒN XU 1: Ưu tiên dùng thẳng xu_job nhận từ lúc lấy Job
+                    xu = xu_job if xu_job > 0 else r.get("data", {}).get("prices", 0)
+                    
                     if xu>0:
                         ok=True
                         xu_fly(xu)
 
-                        # 4. THÊM biến xu_job vào cuối hàm draw_box khi "Bú Job" thành công
                         draw_box(name,job_type,link,done,maxj,total,delay,delay,
                                  stats.get(id,{}).get("xu",0),
                                  get_total_all_acc(stats),
@@ -553,5 +579,3 @@ if __name__=="__main__":
         except Exception as e:
             print("Lỗi, restart...", e)
             time.sleep(5)
-            
-            
