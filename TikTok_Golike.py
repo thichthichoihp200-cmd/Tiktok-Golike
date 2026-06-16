@@ -448,23 +448,23 @@ def main():
                 continue
 
             raw=d.get("type","").lower()
-            xu_job = d.get("price_after_cost", 0)
+            xu_job = d.get("price_per_after_cost", 0)
 
             # Sàng lọc các job không đúng thể loại
             if any(x in raw for x in ["comment","share","view","join"]):
                 draw_box(name,"SKIP","",done,maxj,total,0,1,
                          stats.get(id,{}).get("xu",0),
                          get_total_all_acc(stats),
-                         f"🚫 Bỏ qua job {raw.upper()}")
+                         f"🚫 Bỏ qua job {raw.upper()}", xu_job)
                 time.sleep(1)
                 skip(h,d,id)
                 continue
 
             if not any(x in raw for x in job_filter):
-                draw_box(name,"SKIP","",done,maxj,total,0,1,
-                         stats.get(id,{}).get("xu",0),
-                         get_total_all_acc(stats),
-                         f"🚫 Bỏ qua job {format_job_type(raw)}")
+                draw_box(name, "SKIP", "", done, maxj, total, 0, 1,
+         stats.get(id, {}).get("xu", 0),
+         get_total_all_acc(stats),
+         f"🚫 Bỏ qua job {format_job_type(raw)}", xu_job)
                 time.sleep(1)
                 skip(h,d,id)
                 continue
@@ -504,41 +504,48 @@ def main():
             delay=random.randint(dmin,dmax)
 
             for i in range(1,delay+1):
-                draw_box(name,job_type,link,done,maxj,total,i,delay,
-                         stats.get(id,{}).get("xu",0),
-                         get_total_all_acc(stats),
-                         "Đang Làm Job.", xu_job)
+                draw_box(name, job_type, link, done, maxj, total, i, delay,
+         stats.get(id, {}).get("xu", 0),
+         get_total_all_acc(stats),
+         "⏳ Đang Làm Job...", xu_job)
                 time.sleep(1)
 
             ok=False;xu=0
 
             for attempt in range(1, retry + 1):
-                draw_box(name,job_type,link,done,maxj,total,delay,delay,
-                         stats.get(id,{}).get("xu",0),
+                # Hiển thị thông báo đang xử lý
+                draw_box(name, job_type, link, done, maxj, total, delay, delay,
+                         stats.get(id, {}).get("xu", 0),
                          get_total_all_acc(stats),
-                         f"Đang hoàn thành lần {attempt}/{retry}...", xu_job)
-                r=complete(h,d["id"],id)
+                         f"⏳ Đang hoàn thành lần {attempt}/{retry}...", xu_job)
+                
+                # Gọi API hoàn thành
+                r = complete(h, d["id"], id)
 
-                if r and r.get("status")==200:
-                    # ĐỒNG BỘ NGUỒN XU 1: Ưu tiên dùng thẳng xu_job nhận từ lúc lấy Job
-                    xu = xu_job if xu_job > 0 else r.get("data", {}).get("prices", 0)
+                if r and r.get("status") == 200:
+                    # Lấy xu từ field 'prices' trong data (theo cấu trúc JSON bạn gửi)
+                    data_resp = r.get("data", {})
+                    # Nếu không tìm thấy prices, dùng xu_job dự phòng
+                    xu = data_resp.get("prices", xu_job) if isinstance(data_resp, dict) else xu_job
                     
-                    if xu>0:
-                        ok=True
-                        xu_fly(xu)
+                    if xu > 0:
+                        ok = True
+                        xu_fly(xu) # Hiệu ứng bay xu
 
-                        draw_box(name,job_type,link,done,maxj,total,delay,delay,
-                                 stats.get(id,{}).get("xu",0),
+                        # Cập nhật màn hình sau khi thành công
+                        draw_box(name, job_type, link, done, maxj, total, delay, delay,
+                                 stats.get(id, {}).get("xu", 0) + xu, 
                                  get_total_all_acc(stats),
-                                 f"🔥 Bú Job +{xu} Xu", xu_job)
+                                 f"🔥 Bú Job +{xu} Xu", xu) # Truyền xu vào đây để hiển thị đúng 40
 
                         time.sleep(1.5)
 
-                        stats.setdefault(id,{"job":0,"xu":0,"ts":int(time.time())})
-                        stats[id]["job"]+=1
-                        stats[id]["xu"]+=xu
+                        # Lưu vào stats
+                        stats.setdefault(id, {"job": 0, "xu": 0, "ts": int(time.time())})
+                        stats[id]["job"] += 1
+                        stats[id]["xu"] += xu
                         save_acc_stats(stats)
-                        break
+                        break # Thoát vòng lặp attempt nếu đã thành công
 
                 time.sleep(2)
 
@@ -548,7 +555,7 @@ def main():
                 draw_box(name,"ERROR",link,done,maxj,total,delay,delay,
                          stats.get(id,{}).get("xu",0),
                          get_total_all_acc(stats),
-                         "❌ Hoàn thành thất bại → Bỏ qua job")
+                         "❌ Hoàn thành thất bại → Bỏ qua job", xu_job)
                 time.sleep(2)
 
                 skip(h,d,id)
